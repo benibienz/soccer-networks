@@ -4,7 +4,7 @@ import networkx as nx
 import re
 import os
 
-from .util import TransferNetwork, FinancialTransferNetwork
+from .util import TransferNetwork, FinancialTransferNetwork, BasicTransfer, ClubSeasonInfo
 from collections import defaultdict
 
 # keep this table growing for overlapping names so that we can simplify it
@@ -15,12 +15,13 @@ club_name_mappings = {
     "wolves": "wolverhampton wanderers",
     "brighton": "brighton & hove albion",
     "norwich": "norwich city",
-    "tottenham": "tottenham hotspur",
+    "tottenham": "tottenham hotspurs",
+    "tottenham hotspur": "tottenham hotspurs",
     "west ham": "west ham united",
 }
 
 # exclusions for club names
-name_exclusions = [" fc", "fc ", "club ", " club"]
+name_exclusions = ["afc ", " afc", " fc", "fc ", "club ", " club"]
 
 # re for extracting under age from name
 u_age_re = re.compile(r"[uU][1-9]+")
@@ -130,9 +131,27 @@ def financial_transfer_network_from_df(df: pd.DataFrame, currency='dollars', den
         # get the price
         amount = row['fee_cleaned']
 
+        # if its not a number, make it 0
+        if not str(amount).isdigit():
+            amount = 0.0
+
+        # NOTE: if both teams involved are in the prem, then we get a duplicate edge
+        # so we should check to see if a transfer from one to another with that price exists
+        # since its really unlikely two transfers of the same amount exists between the same two teams
         if row["transfer_movement"] == "out":
+
+            # check if the edge exists and has the same fee
+            if G.has_edge(club_involved, club_name) and any([x['fee'] == amount for _, x in G[club_involved][club_name].items()]):
+                continue
+
             G.add_edge(club_involved, club_name, fee=amount)
-        elif row["transfer_movement"] == "in":
+
+        elif row["transfer_movement"] == "in" and not G.has_edge(club_name, club_involved):
+
+            # check if the edge exists and has the same fee
+            if G.has_edge(club_name, club_involved) and any([x['fee'] == amount for _, x in G[club_name][club_involved].items()]):
+                continue
+
             G.add_edge(club_name, club_involved, fee=amount)
 
         league_clubs.add(club_name)
@@ -153,9 +172,8 @@ def load_prem_financial_transfer_networks(start_year=2000, end_year=2020) -> dic
     financial_transfer_networks = {}
     for year in range(start_year, end_year + 1):
         df = pd.read_csv(f"data/{year}/english_premier_league.csv")
-        financial_transfer_networks[year] = basic_transfer_network_from_df(df)
+        financial_transfer_networks[year] = financial_transfer_network_from_df(df, 'pounds')
     return financial_transfer_networks
-
 
 
 def season_rankings_prem_league(start_year=2000, end_year=2016) -> dict:
@@ -206,3 +224,73 @@ def season_rankings_prem_league(start_year=2000, end_year=2016) -> dict:
         rankings_dict[year][team] = rank
 
     return dict(rankings_dict)
+
+def prem_season_transfer_summary(year: int) -> list:
+    '''
+    Get a season summary of the season
+
+    NOTE: latest year available is 2016, earliest is 1992
+
+    Inputs:
+        year: (int) the fall of the season interested
+    Outputs:
+        (list) ClubSeasonInfo objects for every premier league team in that season
+    '''
+    if year > 2016 or year < 1992:
+        raise f'Year out of range. Year {year} not in range 1992-2016 (inclusive)'
+
+    # get the season rankngs
+    ranks = season_rankings_prem_league(start_year=year, end_year=year)
+
+    # get clean name mappings to match the financial graph
+    name_map = {club: name_cleaner(club) for club in ranks[year]}
+
+    # get the financial transfer graph for the season
+    ftn = load_prem_financial_transfer_networks(start_year=year, end_year=year)
+
+    key = ftn[year].edge_key
+
+    # keep track of all our club seasons
+    csi = []
+
+    # go through each club
+    for club_dirty in ranks[year]:
+
+        # get the clean club name
+        club_name = name_map[club_dirty]
+
+        # keep a list of basic transfers
+        transfers = []
+
+        # go through all edges and got those that have club name in them
+        # NOTE: not the fastest way, but its fast enough
+
+        # for the financial network, edges (u, v) is the flow of money from u to v
+        for u, v, data in ftn[year].G.edges(data=True):
+
+            direction = ''
+            fee = ''
+            club_involved = ''
+
+            # money flows from club TO other team, player comes in, direction is then 'in'
+            if u == club_name:
+                direction = 'in'
+                fee = data[key]
+                club_involved = v
+
+            # money flows from other club TO this club, player goes out, direction is 'out'
+            elif v == club_name:
+                direction = 'out'
+                fee = data[key]
+                club_involved = u
+
+            else:
+                continue
+
+            # add this to transfers
+            transfers.append(BasicTransfer(direction, club_involved, fee))
+
+        # make a ClubSeasonInfo to hold all this
+        csi.append(ClubSeasonInfo(club_name, ranks[year][club_dirty], transfers, ftn[year].currency, ftn[year].denomination))
+
+    return csi

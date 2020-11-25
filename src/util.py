@@ -22,16 +22,27 @@ FinancialTransferNetwork = namedtuple(
 )
 
 '''
+Object for storing basic transfer information
+
+direction:  (str) 'in' or 'out'. Direction of the player either out to club involved or in from club involved
+club_involved:  (str) the other club involved
+fee:    (float) the fee amount
+'''
+BasicTransfer = namedtuple(
+    'BasicTransfer',
+    ['direction', 'club_involved', 'fee']
+)
+
+'''
 Object for storing a team's name, ranking and transfer data
 
-name: str club name
-rank: int the end of season rank of the club
-fee_in: float the amount of money paid to the club in a season
-fee_out: float the amount of money paid to the club in a season
-currency: str the national currency used for transfers
-denomination: float the denomination of the currency. Ex: 100 means a value of 4 is 400
+name:   (str) club name
+rank:   (int) the end of season rank of the club
+transfers:  (list) basic transfer objects for the season
+currency:   (str) the national currency used for transfers
+denomination:   (float) the denomination of the currency. Ex: 100 means a value of 4 is 400
 '''
 ClubSeasonInfo = namedtuple(
     'ClubSeasonInfo',
-    ['name', 'rank', 'fee_in', 'fee_out', 'currency', 'denomination']
+    ['name', 'rank', 'transfers', 'currency', 'denomination']
 )
