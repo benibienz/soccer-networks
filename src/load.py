@@ -159,11 +159,13 @@ def financial_transfer_network_from_df(df: pd.DataFrame, currency='dollars', den
     return FinancialTransferNetwork(G, league_clubs, currency, denomination, edge_key)
 
 
-def load_prem_basic_transfer_networks(start_year=2000, end_year=2020) -> dict:
+def load_basic_transfer_networks(
+    start_year=2000, end_year=2020, league="english_premier_league"
+) -> dict:
     """Loads premier league TransferNetwork objects for given year range"""
     basic_transfer_networks = {}
     for year in range(start_year, end_year + 1):
-        df = pd.read_csv(f"data/{year}/english_premier_league.csv")
+        df = pd.read_csv(f"data/{year}/{league}.csv")
         basic_transfer_networks[year] = basic_transfer_network_from_df(df)
     return basic_transfer_networks
 
