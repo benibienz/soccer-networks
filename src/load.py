@@ -195,7 +195,7 @@ def load_prem_financial_transfer_networks(start_year=2000, end_year=2020) -> dic
 def season_rankings_prem_league(start_year=2000, end_year=2016) -> dict:
     """
     Load in the premier league final season rankings from the data source.
-    NOTE: we have data from 1888/1889 to 2016/2017 so we can't go outside of this range
+    NOTE: we have data from 1888/1889 to 2019/2020 so we can't go outside of this range
 
     Inputs:
         start_year: (int) the first year to get rankings for (this is the Fall year)
@@ -248,7 +248,7 @@ def prem_season_transfer_summary(year: int) -> list:
     """
     Get a season summary of the season
 
-    NOTE: latest year available is 2016, earliest is 1992
+    NOTE: latest year available is 2019, earliest is 1992
 
     Inputs:
         year: (int) the fall of the season interested
