@@ -1,5 +1,7 @@
 import os
 import re
+import math
+
 from collections import defaultdict
 
 import networkx as nx
@@ -104,8 +106,8 @@ def financial_transfer_network_from_df(
     df: pd.DataFrame, currency="dollars", denomination=1000000
 ) -> FinancialTransferNetwork:
     """
-    Create a basic transfer network from a pandas dataframe. Directed
-    edges are player from club x to club y.
+    Create a financial transfer network from a pandas dataframe. Directed
+    edges are fees paid by one team u to another v
     Inputs:
         table:  pandas dataframe with columns 'club_name', 'club_involved_name', 'transfer_movement', 'fee_cleaned'
     Outputs:
@@ -137,8 +139,8 @@ def financial_transfer_network_from_df(
         amount = row["fee_cleaned"]
 
         # if its not a number, make it 0
-        if not str(amount).isdigit():
-            amount = 0.0
+        if math.isnan(amount):
+            amount  = 0.0
 
         # NOTE: if both teams involved are in the prem, then we get a duplicate edge
         # so we should check to see if a transfer from one to another with that price exists
@@ -181,11 +183,11 @@ def load_basic_transfer_networks(
     return basic_transfer_networks
 
 
-def load_prem_financial_transfer_networks(start_year=2000, end_year=2020) -> dict:
+def load_financial_transfer_networks(start_year=2000, end_year=2020, league='english_premier_league') -> dict:
     """Loads premier league TransferNetwork objects for given year range"""
     financial_transfer_networks = {}
     for year in range(start_year, end_year + 1):
-        df = pd.read_csv(f"data/{year}/english_premier_league.csv")
+        df = pd.read_csv(f"data/{year}/{league}.csv")
         financial_transfer_networks[year] = financial_transfer_network_from_df(
             df, "pounds"
         )
