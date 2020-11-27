@@ -1,4 +1,5 @@
 from typing import Callable
+from collections import defaultdict
 
 import numpy as np
 import pandas as pd
@@ -17,7 +18,7 @@ def highest_in_degree(transfer_nw: TransferNetwork) -> str:
             max_in_deg = in_deg
     return res
 
-def get_league_avg_season_fee(
+def get_league_avg_transfer_fee(
     league: str = "english_premier_league",
     network_load_fn: Callable = load_financial_transfer_networks,
     rankings: dict = None,
@@ -25,9 +26,9 @@ def get_league_avg_season_fee(
     end_year: int = 2020,
 ) -> pd.DataFrame:
     '''
-    Get the mean transfer amount both in and out for the season. If rankings supplied, 
-    will calculate averages for top 4 and bottom 3 teams. Min and max values 
-    also supplied
+    Get the mean transfer amount both in and out per transfer. If rankings supplied, 
+    will calculate averages for top 4 and bottom 3 teams. Standard deviation
+    values also supplied
 
     Inputs:
         league: filename of league
@@ -49,47 +50,41 @@ def get_league_avg_season_fee(
         # get the FinancialTransferNetwork object for the year
         ftn_year = ftn_dict.get(year)
 
+        # aggregate all transfers by team first
+        ins_by_team = defaultdict(list, {club: [] for club in ftn_year.league_clubs})
+        outs_by_team = defaultdict(list, {club: [] for club in ftn_year.league_clubs})
+
+        for u, v, data in ftn_year.G.edges(data=True):
+            
+            # if the fee is 0, thats a loan so skip
+            if not data[ftn_year.edge_key] > 0.0:
+                continue
+
+            if u in ftn_year.league_clubs:
+                outs_by_team[u].append(data[ftn_year.edge_key])
+
+            if v in ftn_year.league_clubs:
+                ins_by_team[v].append(data[ftn_year.edge_key])
+
+        # now get the average of each clubs transfers
+        avg_ins_team = {c: 0 if not len(ts) else np.mean(ts) for c, ts in ins_by_team.items()}
+        avg_outs_team = {c: 0 if not len(ts) else np.mean(ts) for c, ts in outs_by_team.items()}
+
         # if we have rankings, get the top 4 and bottom 3 averages
         if rankings is not None:
             top_4 = list(rankings[year])[:5]
             bottom_3 = list(rankings[year])[-3:]
 
-            df.loc[year, 'Top 4 out'] = np.mean(
-                [data[ftn_year.edge_key] for u, _, data in ftn_year.G.edges(data=True)\
-                 if data[ftn_year.edge_key] > 0 and u in top_4]
-            )
+            df.loc[year, 'Top 4 out'] = np.mean([avg_outs_team[club] for club in top_4])
+            df.loc[year, 'Top 4 in'] = np.mean([avg_ins_team[club] for club in top_4])
+    
+            df.loc[year, 'Bottom 3 out'] = np.mean([avg_outs_team[club] for club in bottom_3])
+            df.loc[year, 'Bottom 3 in'] = np.mean([avg_ins_team[club] for club in bottom_3])
 
-            df.loc[year, 'Top 4 in'] = np.mean(
-                [data[ftn_year.edge_key] for  _, v, data in ftn_year.G.edges(data=True)\
-                 if data[ftn_year.edge_key] > 0 and v in top_4]
-            )
-
-            df.loc[year, 'Bottom 3 out'] = np.mean(
-                [data[ftn_year.edge_key] for u, _, data in ftn_year.G.edges(data=True)\
-                 if data[ftn_year.edge_key] > 0 and u in bottom_3]
-            )
-
-            df.loc[year, 'Bottom 3 out'] = np.mean(
-                [data[ftn_year.edge_key] for  _, v, data in ftn_year.G.edges(data=True)\
-                 if data[ftn_year.edge_key] > 0 and v in bottom_3]
-            )
-
-        # get the raw numbers for in and out degrees so that we can get mean, min, max
-        outs = [
-            data[ftn_year.edge_key] for u, v, data in ftn_year.G.edges(data=True)\
-            if data[ftn_year.edge_key] > 0.0 and u in ftn_year.league_clubs
-        ]
-        ins = [
-            data[ftn_year.edge_key] for u, v, data in ftn_year.G.edges(data=True)\
-            if data[ftn_year.edge_key] > 0.0 and v in ftn_year.league_clubs
-        ]
-
-        df.loc[year, 'avg out'] = np.mean(outs)
-        df.loc[year, 'avg in'] = np.mean(ins)
-        df.loc[year, 'min out'] = min(outs)
-        df.loc[year, 'max out'] = max(outs)
-        df.loc[year, 'min in'] = min(ins)
-        df.loc[year, 'max in'] = max(ins)
+        df.loc[year, 'avg out'] = np.mean([v for k, v in avg_outs_team.items()])
+        df.loc[year, 'avg in'] = np.mean([v for k, v in avg_ins_team.items()])
+        df.loc[year, 'std out'] = np.std([v for k, v, in avg_outs_team.items()])
+        df.loc[year, 'std in'] = np.std([v for k, v in avg_ins_team.items()])
 
     return df
 
@@ -157,4 +152,51 @@ def get_league_degrees(
         for club in t.league_clubs:
             df.loc[year, f"{club} out-degree"] = t.G.out_degree(club)
             df.loc[year, f"{club} in-degree"] = t.G.in_degree(club)
+    return df
+
+def get_league_fees(
+    league: str = "english_premier_league",
+    network_load_fn: Callable = load_financial_transfer_networks,
+    start_year: int = 2000,
+    end_year: int = 2020,
+) -> pd.DataFrame:
+    '''
+    Get the spending in and out of a league
+
+    Args:
+        league: filename of league
+        network_load_fn: a function to load network objects
+        start_year: start year
+        end_year: year end
+
+    Returns:
+        df of in and out fees
+    '''
+    df = pd.DataFrame()
+    ftn_dict = network_load_fn(start_year, end_year, league=league)
+
+    for year in range(start_year, end_year + 1):
+
+        ftn_year = ftn_dict.get(year)
+
+        # aggregate all transfers by team first
+        ins_by_team = defaultdict(list, {club: [] for club in ftn_year.league_clubs})
+        outs_by_team = defaultdict(list, {club: [] for club in ftn_year.league_clubs})
+
+        for u, v, data in ftn_year.G.edges(data=True):
+            
+            # if the fee is 0, thats a loan so skip
+            if not data[ftn_year.edge_key] > 0.0:
+                continue
+
+            if u in ftn_year.league_clubs:
+                outs_by_team[u].append(data[ftn_year.edge_key])
+
+            if v in ftn_year.league_clubs:
+                ins_by_team[v].append(data[ftn_year.edge_key])
+
+        for club in ftn_year.league_clubs:
+            df.loc[year, f'{club} in fees'] = 0 if not len(ins_by_team[club]) else np.mean(ins_by_team[club])
+            df.loc[year, f'{club} out fees'] = 0 if not len(outs_by_team[club]) else np.mean(outs_by_team[club])
+
     return df

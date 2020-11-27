@@ -21,6 +21,7 @@ club_name_mappings = {
     "tottenham hotspurs": "tottenham",
     "tottenham hotspur": "tottenham",
     "west ham": "west ham united",
+    "wigan": "wigan athletic"
 }
 
 # exclusions for club names
