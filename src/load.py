@@ -173,6 +173,42 @@ def financial_transfer_network_from_df(
     return FinancialTransferNetwork(G, league_clubs, currency, denomination, edge_key)
 
 
+def basic_financial_transfer_network_from_df(
+    df: pd.DataFrame, currency="dollars", denomination=1000000
+) -> FinancialTransferNetwork:
+    """
+    Create a financial transfer network from a pandas dataframe. Directed
+    edges are fees paid by one team u to another v. Note this is different because 
+    it is only a DiGraph instead of a MultiDiGraph
+    
+    Inputs:
+        table:  pandas dataframe with columns 'club_name', 'club_involved_name', 'transfer_movement', 'fee_cleaned'
+    Outputs:
+        FinancialTransferNetwork
+    """
+    
+    # first just load the graph from financial transfer network
+    ftn = financial_transfer_network_from_df(df, currency=currency, denomination=denomination)
+    
+    # create a new graph that is a digraph instead of multidigraph
+    g = nx.DiGraph()
+
+    # now merge the the edges
+    for u, v, data in ftn.G.edges(data=True):
+        
+        # see if u v in G
+        if g.has_edge(u, v): 
+            
+            # update the value
+            g[u][v]['fee'] += data['fee']
+            continue
+            
+        # otherwise create the edge
+        g.add_edge(u, v, fee=data['fee'])
+        
+    return FinancialTransferNetwork(g, ftn.league_clubs, currency, denomination, 'fee')
+
+
 def load_basic_transfer_networks(
     start_year=2000, end_year=2020, league="english_premier_league"
 ) -> dict:
@@ -190,6 +226,17 @@ def load_financial_transfer_networks(start_year=2000, end_year=2020, league='eng
     for year in range(start_year, end_year + 1):
         df = pd.read_csv(f"data/{year}/{league}.csv")
         financial_transfer_networks[year] = financial_transfer_network_from_df(
+            df, "pounds"
+        )
+    return financial_transfer_networks
+
+
+def load_basic_financial_transfer_networks(start_year=2000, end_year=2020, league='english_premier_league') -> dict:
+    """Loads premier league TransferNetwork objects for given year range"""
+    financial_transfer_networks = {}
+    for year in range(start_year, end_year + 1):
+        df = pd.read_csv(f"data/{year}/{league}.csv")
+        financial_transfer_networks[year] = basic_financial_transfer_network_from_df(
             df, "pounds"
         )
     return financial_transfer_networks
