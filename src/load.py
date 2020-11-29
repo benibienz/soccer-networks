@@ -1,7 +1,6 @@
+import math
 import os
 import re
-import math
-
 from collections import defaultdict
 
 import networkx as nx
