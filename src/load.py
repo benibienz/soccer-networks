@@ -316,7 +316,7 @@ def prem_season_transfer_summary(year: int) -> list:
     name_map = {club: name_cleaner(club) for club in ranks[year]}
 
     # get the financial transfer graph for the season
-    ftn = load_prem_financial_transfer_networks(start_year=year, end_year=year)
+    ftn = load_financial_transfer_networks(start_year=year, end_year=year, league='english_premier_league')
 
     key = ftn[year].edge_key
 
