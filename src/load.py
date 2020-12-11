@@ -7,7 +7,7 @@ import networkx as nx
 import pandas as pd
 
 from .util import (BasicTransfer, ClubSeasonInfo, FinancialTransferNetwork,
-                   TransferNetwork, FullTransferNetwork)
+                   TransferNetwork, FullTransferNetwork, AggregateFullTransferNetwork)
 
 # keep this table growing for overlapping names so that we can simplify it
 club_name_mappings = {
