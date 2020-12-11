@@ -7,7 +7,7 @@ import networkx as nx
 import pandas as pd
 
 from .util import (BasicTransfer, ClubSeasonInfo, FinancialTransferNetwork,
-                   TransferNetwork)
+                   TransferNetwork, FullTransferNetwork)
 
 # keep this table growing for overlapping names so that we can simplify it
 club_name_mappings = {
@@ -19,6 +19,7 @@ club_name_mappings = {
     "norwich": "norwich city",
     "tottenham hotspurs": "tottenham",
     "tottenham hotspur": "tottenham",
+    "spurs": "tottenham",
     "west ham": "west ham united",
     "wigan": "wigan athletic"
 }
@@ -62,6 +63,7 @@ def name_cleaner(name: str) -> str:
 
     return name
 
+#------------------ Load networks from pandas dataframe -----------------------#
 
 def basic_transfer_network_from_df(df: pd.DataFrame) -> TransferNetwork:
     """
@@ -207,6 +209,87 @@ def basic_financial_transfer_network_from_df(
         
     return FinancialTransferNetwork(g, ftn.league_clubs, currency, denomination, 'fee')
 
+def load_full_network_from_df(
+    df: pd.DataFrame, 
+    currency: str = 'dollars', 
+    denomination: float = 1000000
+) -> FullTransferNetwork:
+    '''
+    Create a full transfer network with player involved, fee, year, window
+    
+    Inputs:
+        table:  pandas dataframe with columns 
+        'club_name', 'club_involved_name', 'transfer_movement', 'fee_cleaned', 'transfer_period', 'year', 'player_name'
+    Outputs:
+        FinancialTransferNetwork
+    '''
+    # set the keys used for indexing into edge properties
+    fee_key = "fee"
+    year_key = "year"
+    window_key = "transfer_period"
+    player_key = "player"
+
+    # get all the raw club names
+    clubs = set(
+        list(df["club_name"].unique()) + list(df["club_involved_name"].unique())
+    )
+
+    # create a mapping from the club names in the table to our standardized club names
+    table_to_standard = {club: name_cleaner(club) for club in clubs}
+
+    G = nx.MultiDiGraph()
+
+    league_clubs = set()
+
+    for idx, row in df.iterrows():
+
+        # get the standardized names
+        club_name = table_to_standard[row["club_name"]]
+        club_involved = table_to_standard[row["club_involved_name"]]
+
+        # get the price
+        amount = row["fee_cleaned"]
+        
+        # get the player name
+        player = row["player_name"].lower()
+        
+        # get the transfer year and period
+        year = int(row["year"])
+        window = row["transfer_period"].lower()
+
+        # if its not a number, make it 0
+        if math.isnan(amount):
+            amount  = 0.0
+
+        # NOTE: if both teams involved are in the prem, then we get a duplicate edge
+        # so we should check to see if a transfer from one to another with that player exsits
+        if row["transfer_movement"] == "in":
+
+            # check if the edge exists and has the same fee
+            if G.has_edge(club_involved, club_name) and any(
+                [x[player_key] == player for _, x in G[club_involved][club_name].items()]
+            ):
+                continue
+
+            G.add_edge(club_involved, club_name, fee=amount, year=year, transfer_period=window, player=player)
+
+        elif row["transfer_movement"] == "out":
+
+            # check if the edge exists and has the same player
+            if G.has_edge(club_name, club_involved) and any(
+                [x[player_key] == player for _, x in G[club_name][club_involved].items()]
+            ):
+                continue
+
+            G.add_edge(club_name, club_involved, fee=amount, year=year, transfer_period=window, player=player)
+
+        league_clubs.add(club_name)
+
+    return FullTransferNetwork(G, league_clubs, currency, denomination, player_key, fee_key, year_key, window_key)
+
+    
+
+#----------------------------- Load a league's network over time ------------------------------#
 
 def load_basic_transfer_networks(
     start_year=2000, end_year=2020, league="english_premier_league"
@@ -240,6 +323,66 @@ def load_basic_financial_transfer_networks(start_year=2000, end_year=2020, leagu
         )
     return financial_transfer_networks
 
+def load_full_aggregate_network(
+    start_year: int = 2000, 
+    end_year: int = 2010, 
+    league: str = "english_premier_league"
+) -> AggregateFullTransferNetwork:
+    '''
+    Create an aggregate Full Transfer Network from start year to end year. The graph will contain 
+    attributes such as players, teams, fees, years, and transfer windows
+    
+    Inputs:
+        start_year:  (int) the start year to look at for transfers. Lowest value 1888
+        end_year:    (int) the end year to look at for transfers. Highest value is 2019
+        league:      (str) the league to load
+    Outputs:
+        AggregateFullTransferNetwork
+    '''
+    
+    # create the graph to use
+    G = nx.MultiDiGraph()
+    
+    # keep track of all clubs
+    clubs = []
+    
+    # keep track of the keys
+    player_key = None
+    fee_key = None
+    year_key = None
+    window_key = None
+    denomination = None
+    
+    # go through all years and load the networks
+    for year in range(start_year, end_year + 1):
+        
+        # we have to make the dataframe first
+        df = pd.read_csv(f"data/{year}/{league}.csv")
+        
+        year_ftn = load_full_network_from_df(df, "pounds")
+        
+        # set the keys
+        if year == start_year:
+            player_key = year_ftn.player_key
+            fee_key = year_ftn.fee_key
+            year_key = year_ftn.year_key
+            window_key = year_ftn.window_key
+            denomination = year_ftn.denomination
+        
+        # get all clubs
+        clubs += year_ftn.league_clubs
+        
+        # combine the graphs
+        for u, v, data in year_ftn.G.edges(data=True):
+            G.add_edge(u, v, player=data[player_key], fee=data[fee_key], year=data[year_key], transfer_window=data[window_key])
+        
+    # setify the clubs
+    clubs = list(set(clubs))
+    
+    # now create the AggregateFullTransferNetwork
+    return AggregateFullTransferNetwork(G, clubs, "pounds", denomination, player_key, fee_key, year_key, window_key, start_year, end_year)
+
+#--------------------------- Extra load functions ----------------------------#
 
 def season_rankings_prem_league(start_year=2000, end_year=2016) -> dict:
     """

@@ -34,6 +34,45 @@ BasicTransfer = namedtuple(
 )
 
 '''
+Object for storing a full transfer network. Includes keys for player name, fee amount, 
+year of transfer, and transfer window as well as currency information
+
+G:  (nx MultiDiGraph)
+league_cliubs:  (list) clubs in the network
+currency:   (str) the currency used
+denomination:   (float) the factor by which the fee amounts are multiplied by
+player_key: (str) the key to extract a player's name from an edge
+fee_key:    (str) the key to extract the transfer fee from an edge
+year_key:   (str) the key to extract the year of the transfer from an edge
+window_key: (str) the key to extract the transfer window fro an edge
+'''
+FullTransferNetwork = namedtuple(
+    'FullTransferNetwork',
+    ['G', 'league_clubs', 'currency', 'denomination', 'player_key', 'fee_key', 'year_key', 'window_key']
+)
+
+'''
+Object for storing a full transfer network. Includes keys for player name, fee amount, 
+year of transfer, and transfer window as well as currency information. Single graph
+over many years
+
+G:  (nx MultiDiGraph)
+league_cliubs:  (list) clubs in the network
+currency:   (str) the currency used
+denomination:   (float) the factor by which the fee amounts are multiplied by
+player_key: (str) the key to extract a player's name from an edge
+fee_key:    (str) the key to extract the transfer fee from an edge
+year_key:   (str) the key to extract the year of the transfer from an edge
+window_key: (str) the key to extract the transfer window fro an edge
+start_year: (int) the first year of transfers in the network
+end_year:   (int) the last year of transfers in the network
+'''
+AggregateFullTransferNetwork = namedtuple(
+    'AggregateFullTransferNetwork',
+    ['G', 'league_clubs', 'currency', 'denomination', 'player_key', 'fee_key', 'year_key', 'window_key', 'start_year', 'end_year']
+)
+
+'''
 Object for storing a team's name, ranking and transfer data
 
 name:   (str) club name
